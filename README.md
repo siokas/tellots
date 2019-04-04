@@ -1,4 +1,5 @@
 <p align="center"><img src="https://i.imgur.com/QLX5ZyT.png"></p>
+<p align="center"><img src="https://travis-ci.org/siokas/tellots.svg?branch=master"></p>
 
 ## TelloTS
 
