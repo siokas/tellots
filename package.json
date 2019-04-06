@@ -1,6 +1,6 @@
 {
   "name": "tellots",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "An elegant Javascript library around the Tello SDK (Drone)",
   "main": "./dist/app.js",
   "types": "./dist/app.d.ts",

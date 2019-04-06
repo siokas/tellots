@@ -20,7 +20,8 @@ $ npm i tellots
 The package exports a class so at first you have to import and initiate the Object.
 
 ```text
-import { Tello } from "tellots"
+import Tello from "tellots"
+// or var Tello = require('tellots')
 
 var tello = new Tello();
 
