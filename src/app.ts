@@ -2,10 +2,20 @@ import { Socket, createSocket } from "dgram";
 import config from "./config.json";
 import dgram from "dgram";
 import { throttle } from "lodash";
+import { sleep } from "./helpers";
+import { resolve } from "url";
+import { rejects } from "assert";
 
-export class Tello {
+interface ConstructorParameterOptions {
+  host?: string;
+  port?: number;
+  inCommandMode?: boolean;
+}
+
+class Tello {
   host: string;
   port: number;
+  inCommandMode!: boolean;
 
   // Socket to send commands to the drone
   client: Socket = dgram.createSocket({ type: "udp4", reuseAddr: true });
@@ -14,16 +24,56 @@ export class Tello {
   drone: Socket = dgram.createSocket({ type: "udp4", reuseAddr: true });
 
   /**
-   * Assign the 'host' and the 'port' public properties if passed through the constructor and bind the port to the socket.
-   * 
+   * Assign the 'host', 'port' and in public properties if passed through the constructor and bind the port to the socket.
+   *
    * @param host string
    * @param port number
    */
-  constructor(host = config.address.host, port = config.address.port) {
-    this.client.bind(port);
+  constructor(host: string, port: number, inCommandMode: boolean);
+  constructor(host: string, port: number);
+  constructor(host: string);
+  constructor(port: number);
+  constructor(inCommandMode: boolean);
+  constructor(options: ConstructorParameterOptions);
+  constructor(optionsOrOther: any, port?: number, inCommandMode?: boolean) {
+    this.host = config.address.host;
+    this.port = config.address.port;
+    this.inCommandMode = true;
 
-    this.host = host;
-    this.port = port;
+    if (typeof optionsOrOther === "object") {
+      if (optionsOrOther.hasOwnProperty("host")) {
+        this.host = optionsOrOther.host;
+      }
+
+      if (optionsOrOther.hasOwnProperty("port")) {
+        this.port = optionsOrOther.port;
+      }
+
+      if (optionsOrOther.hasOwnProperty("inCommandMode")) {
+        this.inCommandMode = optionsOrOther.inCommandMode;
+      }
+    } else {
+      if (typeof optionsOrOther === "number") {
+        this.port = optionsOrOther;
+      } else if (typeof optionsOrOther === "boolean") {
+        this.inCommandMode = optionsOrOther;
+      } else if (typeof optionsOrOther === "string") {
+        this.host = optionsOrOther;
+
+        if (typeof port !== "undefined") {
+          this.port = port;
+        }
+
+        if (typeof inCommandMode !== "undefined") {
+          this.inCommandMode = inCommandMode;
+        }
+      }
+    }
+
+    // // Enable command mode and start listening the messages from the drone
+    if (this.inCommandMode) {
+      this.commandMode().then(() => this.listen());
+    }
   }
 
   /**
@@ -32,14 +82,16 @@ export class Tello {
   async listen() {
     this.drone.bind(8890);
 
-    this.drone.on("message", message => {
+    this.drone.on(
+      "message",
       throttle(state => {
-        this.parseState(state.toString());
-      }, 1000);
-    });
+        let droneState = this.parseState(state.toString());
+        console.log(droneState);
+      }, 1000)
+    );
 
     this.client.on("message", message => {
-      console.log(message.toString());
+      console.log(message.toString("utf8"));
     });
   }
 
@@ -48,7 +100,7 @@ export class Tello {
    *
    * @param state string
    */
-  parseState(state: string) {
+  parseState(state: string): Array<Number> {
     return state
       .split(";")
       .map(x => x.split(":"))
@@ -63,33 +115,75 @@ export class Tello {
    *
    * @param command The command to send to the drone
    */
-  async send(command: string) {
+  send(command: string): Error | string {
     var message: Buffer = Buffer.from(command);
 
     this.client.send(message, 0, message.length, this.port, this.host, err => {
       console.error(err);
+      return new Error(
+        "An error occured while sending your command to the drone!"
+      );
     });
+
+    return "ok";
   }
 
   /**
    * Enter SDK Mode
    */
-  commandMode() {
-    this.send("command");
+  async commandMode(delay = config.delays.command) {
+    let state = this.send("command");
+
+    await sleep(delay);
+
+    return new Promise((resolve, reject) => {
+      if (state instanceof Error) {
+        reject(state);
+      }
+
+      console.log('command Mode')
+      resolve("ok");
+    });
   }
 
   /**
    * Auto takeoff.
    */
-  takeoff() {
-    this.send("takeoff");
+  async takeoff(delay = config.delays.takeoff) {
+    let state = this.send("takeoff");
+
+    await sleep(delay)
+
+    return new Promise((resolve, reject) => {
+      if (state instanceof Error) {
+        reject(state);
+      }
+
+      console.log('takeoff')
+      resolve("ok");
+    });
+
+    
   }
 
   /**
    * Auto landing.
    */
-  land() {
-    this.send("land");
+  async land(delay = config.delays.land) {
+    let state = this.send("land");
+
+    await sleep(delay);
+
+    
+
+    return new Promise((resolve, reject) => {
+      if (state instanceof Error) {
+        reject(state);
+      }
+
+      console.log('land')
+      resolve("ok");
+    });
   }
 
   /**
@@ -97,11 +191,23 @@ export class Tello {
    *
    * @param distance between (20 - 500)
    */
-  up(distance = config.defaults.up) {
+  async up(distance = config.defaults.up, delay = config.delays.up) {
     if (distance < 20) distance = 20;
     if (distance > 500) distance = 500;
 
-    this.send("up " + distance);
+    let state = this.send("up " + distance);
+
+    console.log('up');
+
+    await sleep(delay);
+
+    return new Promise((resolve, reject) => {
+      if (state instanceof Error) {
+        reject(state);
+      }
+
+      resolve("ok");
+    });
   }
 
   /**
@@ -109,11 +215,21 @@ export class Tello {
    *
    * @param distance between (20 - 500)
    */
-  down(distance = config.defaults.down) {
+  async down(distance = config.defaults.down, delay = config.delays.down) {
     if (distance < 20) distance = 20;
     if (distance > 500) distance = 500;
 
-    this.send("down " + distance);
+    let state = this.send("down " + distance);
+
+    await sleep(delay);
+
+    return new Promise((resolve, reject) => {
+      if (state instanceof Error) {
+        reject(state);
+      }
+
+      resolve("ok");
+    });
   }
 
   /**
@@ -121,11 +237,21 @@ export class Tello {
    *
    * @param distance between (20 - 500)
    */
-  left(distance = config.defaults.left) {
+  async left(distance = config.defaults.left, delay = config.delays.left) {
     if (distance < 20) distance = 20;
     if (distance > 500) distance = 500;
 
-    this.send("left " + distance);
+    let state = this.send("left " + distance);
+
+    await sleep(delay);
+
+    return new Promise((resolve, reject) => {
+      if (state instanceof Error) {
+        reject(state);
+      }
+
+      resolve("ok");
+    });
   }
 
   /**
@@ -133,11 +259,21 @@ export class Tello {
    *
    * @param distance between (20 - 500)
    */
-  right(distance = config.defaults.right) {
+  async right(distance = config.defaults.right, delay = config.delays.right) {
     if (distance < 20) distance = 20;
     if (distance > 500) distance = 500;
 
-    this.send("right " + distance);
+    let state = this.send("right " + distance);
+
+    await sleep(delay);
+
+    return new Promise((resolve, reject) => {
+      if (state instanceof Error) {
+        reject(state);
+      }
+
+      resolve("ok");
+    });
   }
 
   /**
@@ -145,11 +281,24 @@ export class Tello {
    *
    * @param distance between (20 - 500)
    */
-  forward(distance = config.defaults.forward) {
+  async forward(
+    distance = config.defaults.forward,
+    delay = config.delays.forward
+  ) {
     if (distance < 20) distance = 20;
     if (distance > 500) distance = 500;
 
-    this.send("forward " + distance);
+    let state = this.send("forward " + distance);
+
+    await sleep(delay);
+
+    return new Promise((resolve, reject) => {
+      if (state instanceof Error) {
+        reject(state);
+      }
+
+      resolve("ok");
+    });
   }
 
   /**
@@ -157,11 +306,21 @@ export class Tello {
    *
    * @param distance between (20 - 500)
    */
-  back(distance = config.defaults.back) {
+  async back(distance = config.defaults.back, delay = config.delays.back) {
     if (distance < 20) distance = 20;
     if (distance > 500) distance = 500;
 
-    this.send("back " + distance);
+    let state = this.send("back " + distance);
+
+    await sleep(delay);
+
+    return new Promise((resolve, reject) => {
+      if (state instanceof Error) {
+        reject(state);
+      }
+
+      resolve("ok");
+    });
   }
 
   /**
@@ -169,11 +328,21 @@ export class Tello {
    *
    * @param degrees between (1 - 360)
    */
-  cw(degrees = config.defaults.cw) {
+  async cw(degrees = config.defaults.cw, delay = config.delays.cw) {
     if (degrees < 1) degrees = 1;
     if (degrees > 3600) degrees = 3600;
 
-    this.send("cw " + degrees);
+    let state = this.send("cw " + degrees);
+
+    await sleep(delay);
+
+    return new Promise((resolve, reject) => {
+      if (state instanceof Error) {
+        reject(state);
+      }
+
+      resolve("ok");
+    });
   }
 
   /**
@@ -181,11 +350,21 @@ export class Tello {
    *
    * @param degrees between (1 - 360)
    */
-  ccw(degrees = config.defaults.ccw) {
+  async ccw(degrees = config.defaults.ccw, delay = config.delays.ccw) {
     if (degrees < 1) degrees = 1;
     if (degrees > 3600) degrees = 3600;
 
-    this.send("ccw " + degrees);
+    let state = this.send("ccw " + degrees);
+
+    await sleep(delay);
+
+    return new Promise((resolve, reject) => {
+      if (state instanceof Error) {
+        reject(state);
+      }
+
+      resolve("ok");
+    });
   }
 
   /**
@@ -193,8 +372,21 @@ export class Tello {
    *
    * @param direction 'l', 'r', 'f', 'b'
    */
-  flip(direction: "l" | "r" | "f" | "b") {
-    this.send("flip " + direction);
+  async flip(
+    direction: "l" | "r" | "f" | "b" = "l",
+    delay = config.delays.flip
+  ) {
+    let state = this.send("flip " + direction);
+
+    await sleep(delay);
+
+    return new Promise((resolve, reject) => {
+      if (state instanceof Error) {
+        reject(state);
+      }
+
+      resolve("ok");
+    });
   }
 
   /**
@@ -208,7 +400,14 @@ export class Tello {
    * @param speed between (10 - 100) (cm/s)
    * @param mid (optional) m1-m8
    */
-  go(x: number, y: number, z: number, speed: number, mid?: string) {
+  async go(
+    x: number,
+    y: number,
+    z: number,
+    speed: number,
+    mid?: string,
+    delay = config.delays.go
+  ) {
     if (x < 20) x = 20;
     if (x > 500) x = 500;
     if (y < 20) y = 20;
@@ -218,7 +417,17 @@ export class Tello {
     if (speed < 10) speed = 10;
     if (speed > 60) speed = 60;
 
-    this.send("go " + x + " " + y + " " + z + " " + speed);
+    let state = this.send("go " + x + " " + y + " " + z + " " + speed);
+
+    await sleep(delay);
+
+    return new Promise((resolve, reject) => {
+      if (state instanceof Error) {
+        reject(state);
+      }
+
+      resolve("ok");
+    });
   }
 
   /**
@@ -235,14 +444,15 @@ export class Tello {
    * @param z2 should be bettween (-500 - +500)
    * @param speed should be between (10 - 100)
    */
-  curve(
+  async curve(
     x1: number,
     y1: number,
     z1: number,
     x2: number,
     y2: number,
     z2: number,
-    speed: number
+    speed: number,
+    delay = config.delays.curve
   ) {
     if (x1 < 20) x1 = 20;
     if (x1 > 500) x1 = 500;
@@ -259,7 +469,7 @@ export class Tello {
     if (speed < 10) speed = 10;
     if (speed > 60) speed = 60;
 
-    this.send(
+    let state = this.send(
       "curve " +
         x1 +
         " " +
@@ -275,6 +485,16 @@ export class Tello {
         " " +
         speed
     );
+
+    await sleep(delay);
+
+    return new Promise((resolve, reject) => {
+      if (state instanceof Error) {
+        reject(state);
+      }
+
+      resolve("ok");
+    });
   }
 
   /**
@@ -282,32 +502,75 @@ export class Tello {
    *
    * @param speed between (10 - 100)
    */
-  setSpeed(speed = config.defaults.speed) {
+  async setSpeed(
+    speed = config.defaults.speed,
+    delay = config.delays.setSpeed
+  ) {
     if (speed < 10) speed = 10;
     if (speed > 100) speed = 100;
 
-    this.send("speed " + speed);
+    let state = this.send("speed " + speed);
+
+    await sleep(delay);
+
+    return new Promise((resolve, reject) => {
+      if (state instanceof Error) {
+        reject(state);
+      }
+
+      resolve("ok");
+    });
   }
 
   /**
    * Stop motors immedietly.
    */
-  emergency() {
-    this.send("emergency");
+  async emergency(delay = config.delays.emergency) {
+    let state = this.send("emergency");
+
+    await sleep(delay);
+
+    return new Promise((resolve, reject) => {
+      if (state instanceof Error) {
+        reject(state);
+      }
+
+      resolve("ok");
+    });
   }
 
   /**
    * Enable mission pad detection (both forward and downward detection)
    */
-  mon() {
-    this.send("mon");
+  async mon(delay = config.delays.command) {
+    let state = this.send("mon");
+
+    await sleep(delay);
+
+    return new Promise((resolve, reject) => {
+      if (state instanceof Error) {
+        reject(state);
+      }
+
+      resolve("ok");
+    });
   }
 
   /**
    * Disable mission pad detection
    */
-  moff() {
-    this.send("moff");
+  async moff(delay = config.delays.command) {
+    let state = this.send("moff");
+
+    await sleep(delay);
+
+    return new Promise((resolve, reject) => {
+      if (state instanceof Error) {
+        reject(state);
+      }
+
+      resolve("ok");
+    });
   }
 
   /**
@@ -315,7 +578,7 @@ export class Tello {
    *
    * @param detect boolean
    */
-  missionPad(detect: boolean) {
+  async missionPad(detect: boolean) {
     if (detect) {
       this.mon();
     } else {
@@ -329,12 +592,28 @@ export class Tello {
    * @param ssid string
    * @param password string
    */
-  wifiPass(ssid: string, password: string) {}
+  async wifiPass(ssid: string, password: string) {}
 
   /**
    * Terminate the udp connection
    */
-  close() {
+  async close() {
     this.client.close();
   }
+
+  async battery(delay = config.delays.command) {
+    let state = this.send("battery?");
+
+    await sleep(delay);
+
+    return new Promise((resolve, reject) => {
+      if (state instanceof Error) {
+        reject(state);
+      }
+
+      resolve("ok");
+    });
+  }
 }
+
+export = Tello;

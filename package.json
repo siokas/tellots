@@ -5,13 +5,19 @@
   "main": "./dist/app.js",
   "types": "./dist/app.d.ts",
   "scripts": {
+    "test": "mocha --exit"
   },
   "repository": {
     "type": "git",
     "url": "https://github.com/siokas/tellojs"
   },
   "keywords": [
-    "tello", "tellojs", "typescript", "javascript", "tellosdk", "drone"
+    "tello",
+    "tellojs",
+    "typescript",
+    "javascript",
+    "tellosdk",
+    "drone"
   ],
   "author": "Apostolos Siokas",
   "license": "MIT",
@@ -19,5 +25,8 @@
     "@types/lodash": "^4.14.123",
     "@types/node": "^11.13.0",
     "lodash": "^4.17.11"
+  },
+  "devDependencies": {
+    "mocha": "^6.0.2"
   }
 }
