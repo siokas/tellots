@@ -24,8 +24,6 @@ import { Tello } from "tellots"
 
 var tello = new Tello();
 
-tello.commandMode(); // Tell drone to go in command mode
-
 tello.takeoff(); // Start flying
 ```
 
