@@ -7,6 +7,7 @@ node_js:
 
 env:
   - workerCount=3 timeout=600000
+  - CODECOV_TOKEN="394696a3-d7da-4c13-b1c0-cc63c7940a4c"
 
 matrix:
   fast_finish: true
@@ -24,6 +25,7 @@ cache:
     - node_modules
     
 scripts:
+  - nmp test
   - npm install codecov -g
 after_success:
   - codecov
