@@ -650,3 +650,4 @@ var Tello = (function () {
     return Tello;
 }());
 module.exports = Tello;
+//# sourceMappingURL=app.js.map
