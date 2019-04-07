@@ -1,7 +1,11 @@
 > **in development**
 
 <p align="center"><img src="https://i.imgur.com/QLX5ZyT.png"></p>
-<p align="center"><img src="https://travis-ci.org/siokas/tellots.svg?branch=master"></p>
+<p align="center">
+<img src="https://travis-ci.org/siokas/tellots.svg?branch=master">
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+</p>
+
 
 ## TelloTS
 

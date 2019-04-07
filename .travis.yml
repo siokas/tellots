@@ -22,3 +22,8 @@ install:
 cache:
   directories:
     - node_modules
+    
+scripts:
+  - npm install codecov -g
+after_success:
+  - codecov
